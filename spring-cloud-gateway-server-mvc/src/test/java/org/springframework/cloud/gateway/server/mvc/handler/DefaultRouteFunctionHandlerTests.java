@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2024 the original author or authors.
+ * Copyright 2013-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package org.springframework.cloud.gateway.server.mvc.config;
+package org.springframework.cloud.gateway.server.mvc.handler;
 
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -29,45 +30,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.gateway.server.mvc.test.client.TestRestClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {}, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ActiveProfiles("functionhandlerconfigtests")
-public class FunctionHandlerConfigTests {
+public class DefaultRouteFunctionHandlerTests {
 
 	@Autowired
 	private TestRestClient restClient;
 
 	@Test
-	public void testSimpleFunctionWorks() {
-		restClient.post()
-			.uri("/simplefunction")
-			.accept(MediaType.TEXT_PLAIN)
-			.bodyValue("hello")
-			.exchange()
-			.expectStatus()
-			.isOk()
-			.expectBody(String.class)
-			.isEqualTo("HELLO");
-	}
-
-	@Test
-	public void testTemplatedFunctionWorks() {
-		restClient.post()
-			.uri("/templatedfunction/upper")
-			.accept(MediaType.TEXT_PLAIN)
-			.bodyValue("hello")
-			.exchange()
-			.expectStatus()
-			.isOk()
-			.expectBody(String.class)
-			.isEqualTo("HELLO");
-	}
-
-	@Test
-	public void testSupplierFunctionWorks() {
+	public void testSupplierWorks() {
 		restClient.get()
-			.uri("/supplierfunction")
+			.uri("/hello")
 			.accept(MediaType.TEXT_PLAIN)
 			.exchange()
 			.expectStatus()
@@ -76,13 +51,67 @@ public class FunctionHandlerConfigTests {
 			.isEqualTo("hello");
 	}
 
+	@Test
+	public void testFunctionWorksGET() {
+		restClient.get()
+			.uri("/upper/bob")
+			.accept(MediaType.TEXT_PLAIN)
+			.exchange()
+			.expectStatus()
+			.isOk()
+			.expectBody(String.class)
+			.isEqualTo("BOB");
+	}
+
+	@Test
+	public void testFunctionWorksPOST() {
+		restClient.post()
+			.uri("/upper")
+			.accept(MediaType.APPLICATION_JSON)
+			.bodyValue("bob")
+			.exchange()
+			.expectStatus()
+			.isOk()
+			.expectBody(String.class)
+			.isEqualTo("BOB");
+	}
+
+	@Test
+	public void testConsumerWorksGET() {
+		restClient.get().uri("/consume/hello").accept(MediaType.TEXT_PLAIN).exchange().expectStatus().isAccepted();
+		assertThat(TestConfiguration.consumerInvoked).isTrue();
+	}
+
+	@Test
+	public void testConsumerWorksPOST() {
+		restClient.post()
+			.uri("/consume")
+			.accept(MediaType.APPLICATION_JSON)
+			.bodyValue("hello")
+			.exchange()
+			.expectStatus()
+			.isAccepted();
+		assertThat(TestConfiguration.consumerInvoked).isTrue();
+	}
+
 	@SpringBootConfiguration
 	@EnableAutoConfiguration
 	protected static class TestConfiguration {
 
+		static boolean consumerInvoked;
+
 		@Bean
 		Function<String, String> upper() {
 			return s -> s.toUpperCase(Locale.ROOT);
+		}
+
+		@Bean
+		Consumer<String> consume() {
+			return s -> {
+				consumerInvoked = false;
+				assertThat(s).isEqualTo("hello");
+				consumerInvoked = true;
+			};
 		}
 
 		@Bean
